@@ -8,18 +8,59 @@
 ---
 
 ## 📌 Deskripsi Repositori
-Repositori ini berisi *source code*, skematik rangkaian, dan dokumentasi hasil praktikum Modul I yang berfokus pada implementasi struktur kontrol percabangan (`if-else`) dan perulangan (`for`) menggunakan platform mikrokontroler Arduino. 
+Repositori ini berisi source code, skematik rangkaian, dan dokumentasi hasil praktikum Modul 3 yang berfokus pada implementasi protokol komunikasi serial menggunakan antarmuka UART (Universal Asynchronous Receiver-Transmitter) dan I2C (Inter-Integrated Circuit) pada platform mikrokontroler Arduino Uno.
 
-Praktikum ini dirancang untuk memahami bagaimana pengambilan keputusan logika dan perulangan memengaruhi jalannya eksekusi program perangkat keras, khususnya dalam memanipulasi pin *Output* untuk menyalakan susunan komponen LED.
+Praktikum ini dirancang untuk memahami bagaimana mikrokontroler dapat menerima komando interaktif dari antarmuka komputer melalui Serial Monitor (UART), serta bagaimana membaca nilai sensor analog (potensiometer) dan mentransmisikan datanya secara sinkron ke dalam modul display eksternal seperti LCD I2C.
 
 ---
-## 🔬 Analisis Percobaan 1
-### 1. Pada kondisi apa program masuk ke blok if? 
-Pada kondisi nilai delay sudah kurang atau saama dengan seratus 
-### 2. Pada kondisi apa program masuk ke blok else? 
-Pada kondisi nilai delay diatas 100 yang mana ketika baru menyala nilainya adalah 1000
-### 3.  Apa fungsi dari perintah delay(timeDelay)? 
-Fungsi dari delay adalah mendefinisikan waktu yang akan dipakai untuk  menyalakan dan mematikan LED
+## 🔬 Analisis Percobaan 1 (UART)
+### 1. Jelaskan proses dari input keyboard hingga LED menyala/mati!
+Saat pengguna mengetikkan perintah ('1' atau '0') di keyboard melalui Serial Monitor, komputer mengirimkan karakter tersebut dalam bentuk biner melalui kabel USB. IC konverter USB-to-Serial pada board Arduino mengubah sinyal USB tersebut menjadi sinyal UART standar dan meneruskannya ke pin RX (Receive) mikrokontroler utama (ATmega328P). Data ini kemudian disimpan sementara di dalam serial buffer Arduino. Saat fungsi Serial.read() dipanggil di dalam loop(), mikrokontroler membaca karakter tersebut, lalu memprosesnya melalui struktur percabangan if. Jika karakter yang dibaca adalah '1', mikrokontroler mengeksekusi digitalWrite(PIN_LED, HIGH) yang mengirimkan tegangan ke pin digital sehingga LED menyala.
+### 2. Mengapa digunakan Serial.available() sebelum membaca data? Apa yang terjadi jika baris tersebut dihilangkan?
+Serial.available() digunakan untuk memastikan bahwa mikrokontroler hanya melakukan pembacaan serial buffer ketika ada data instruksi baru yang masuk. Jika baris ini dihilangkan, fungsi Serial.read() akan dipanggil terus-menerus tanpa henti. Jika tidak ada data yang masuk, Serial.read() akan mengembalikan nilai -1, yang dapat menyebabkan program mengeksekusi blok kondisi yang salah secara terus-menerus (misalnya masuk ke blok peringatan error) dan membuat sistem menjadi buggy dan membuang sumber daya pemrosesan.
+### 3.  Modifikasi program agar LED berkedip (blink) ketika menerima input '2' (Sertakan penjelasan baris kode)
+```cpp const int PIN_LED = 8;
+char state = '0';                   // Variabel untuk menyimpan status perintah terakhir
+unsigned long previousMillis = 0;   // Menyimpan waktu terakhir LED berkedip
+const long interval = 500;          // Interval kedip LED (500 ms)
+bool ledState = LOW;                // Menyimpan status nyala/mati LED saat ini
+
+void setup() {
+  Serial.begin(9600);               // Inisialisasi komunikasi serial baud rate 9600
+  pinMode(PIN_LED, OUTPUT);         // Mengatur pin LED sebagai OUTPUT
+  Serial.println("Ketik '1' (ON), '0' (OFF), '2' (BLINK)");
+}
+
+void loop() {
+  // Cek apakah ada data masuk di serial buffer
+  if (Serial.available() > 0) {
+    char data = Serial.read();      // Membaca 1 byte karakter dari serial
+    
+    // Validasi agar hanya mengubah state jika inputnya sesuai (0, 1, atau 2)
+    if (data == '0' || data == '1' || data == '2') {
+      state = data;                 // Perbarui state dengan perintah terbaru
+    }
+  }
+
+  // Eksekusi berdasarkan state terakhir yang tersimpan
+  if (state == '1') {
+    digitalWrite(PIN_LED, HIGH);    // LED nyala konstan
+  } 
+  else if (state == '0') {
+    digitalWrite(PIN_LED, LOW);     // LED mati konstan
+  } 
+  else if (state == '2') {
+    // Mode Blink menggunakan millis() agar non-blocking
+    unsigned long currentMillis = millis(); // Ambil waktu sistem saat ini
+    
+    if (currentMillis - previousMillis >= interval) {
+      previousMillis = currentMillis;       // Catat waktu kedip terakhir
+      ledState = !ledState;                 // Balik status LED (HIGH ke LOW / LOW ke HIGH)
+      digitalWrite(PIN_LED, ledState);      // Terapkan status ke pin LED
+    }
+  }
+}
+
 ### 4.  Berikan penjelasan disetiap baris kode nya setalah  LED tidak langsung reset → tetapi berubah dari cepat → sedang → mati
 ```cpp
 const int ledPin = 6;        // Pin digital tempat LED terhubung
@@ -51,6 +92,9 @@ void loop() {
   }
 }
 ```
+### 4.Tentukan apakah menggunakan delay() atau millis()! Jelaskan pengaruhnya terhadap sistem
+Untuk membuat modifikasi blink yang bisa dipotong/diinterupsi oleh perintah lain secara real-time, wajib menggunakan millis().
+Jika menggunakan delay(), sistem akan memblokir (blocking) seluruh eksekusi program. Artinya, saat LED sedang berada di fase penundaan nyala/mati (misal delay(500)), Arduino "tuli" dan tidak akan bisa langsung merespons jika kita memasukkan input baru (seperti mematikan LED dengan input '0') sampai waktu delay() tersebut habis sepenuhnya. Dengan millis(), program bekerja secara asynchronous/non-blocking, sehingga mikrokontroler dapat terus memonitor input dari Serial.available() sembari menjaga ritme kedipan LED di latar belakang
 ---
 ## Analisa Percobaan 2
 ### 1. Gambarkan rangkaian schematic 5 LED running yang digunakan pada percobaan!
